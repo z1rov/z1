@@ -1,4 +1,3 @@
-// Author: z1rov
 package ui
 
 import (
@@ -10,37 +9,37 @@ import (
 )
 
 const (
-	colorEmerald = "\033[38;5;35m"
-	colorLime    = "\033[38;5;118m"
-	colorTeal    = "\033[38;5;29m"
-	colorDim     = "\033[2m"
-	colorBold    = "\033[1m"
-	colorReset   = "\033[0m"
+	colorPurple = "\033[38;5;129m"
+	colorYellow = "\033[38;5;226m"
+	colorRed    = "\033[38;5;196m"
+	colorDim    = "\033[2m"
+	colorBold   = "\033[1m"
+	colorReset  = "\033[0m"
 
-	clrInfo  = "\033[38;5;35m"
-	clrOk    = "\033[38;5;46m"
-	clrWarn  = "\033[38;5;118m"
-	clrErr   = "\033[1;38;5;40m"
-	clrMeta  = "\033[38;5;29m"
-	clrAcct  = "\033[38;5;82m"
+	clrInfo  = "\033[38;5;135m"
+	clrOk    = "\033[38;5;220m"
+	clrWarn  = "\033[38;5;226m"
+	clrErr   = "\033[1;38;5;196m"
+	clrMeta  = "\033[38;5;93m"
+	clrAcct  = "\033[38;5;214m"
 	clrDim   = "\033[2m"
 	clrBold  = "\033[1m"
 	clrReset = "\033[0m"
 )
 
 const (
-	ClrOk     = "\033[38;5;46m"
-	ClrWarn   = "\033[38;5;118m"
-	ClrErr    = "\033[1;38;5;40m"
-	ClrInfo   = "\033[38;5;35m"
-	ClrMeta   = "\033[38;5;29m"
+	ClrOk     = "\033[38;5;220m"
+	ClrWarn   = "\033[38;5;226m"
+	ClrErr    = "\033[1;38;5;196m"
+	ClrInfo   = "\033[38;5;135m"
+	ClrMeta   = "\033[38;5;93m"
 	ClrDimStr = "\033[2m"
 	ClrReset  = "\033[0m"
 )
 
 const RepoURL = "https://github.com/z1rov/z1"
 
-var greens = []string{"22", "28", "34", "40", "46", "82"}
+var greens = []string{"93", "99", "129", "135", "141", "213"}
 
 func Info(msg string) {
 	fmt.Printf("  %s[*]%s %s\n", clrInfo, clrReset, msg)
@@ -123,7 +122,7 @@ func StartScreen(anvil string) {
 
 	fmt.Printf("        ")
 	for _, ch := range "Isolated" {
-		fmt.Printf("\033[38;5;118m%c\033[0m", ch)
+		fmt.Printf("\033[38;5;226m%c\033[0m", ch)
 		time.Sleep(80 * time.Millisecond)
 	}
 	fmt.Printf("\n\n")
@@ -196,10 +195,10 @@ func LayerLine(id, status string) {
 		color = clrOk
 		icon = "✔"
 	case strings.Contains(lower, "pulling"):
-		color = colorEmerald
+		color = colorPurple
 		icon = "↓"
 	case strings.Contains(lower, "extract"):
-		color = colorTeal
+		color = colorYellow
 		icon = "⧗"
 	case strings.Contains(lower, "verif"):
 		color = clrMeta
@@ -216,7 +215,7 @@ func LayerLine(id, status string) {
 func Usage(imageInstalled, containerRunning bool) {
 	fmt.Println()
 	printAsciiArt()
-	fmt.Printf("        \033[38;5;118mIsolated\033[0m\n\n")
+	fmt.Printf("        \033[38;5;226mIsolated\033[0m\n\n")
 
 	printMeta()
 	fmt.Println()
@@ -242,7 +241,7 @@ func Usage(imageInstalled, containerRunning bool) {
 		entries []entry
 	}{
 		{
-			"container", "40",
+			"container", "196",
 			[]entry{
 				{"start", "start z1 container"},
 				{"stop", "stop z1 container"},
@@ -253,7 +252,7 @@ func Usage(imageInstalled, containerRunning bool) {
 			},
 		},
 		{
-			"image", "29",
+			"image", "93",
 			[]entry{
 				{"install", "pull z1 image"},
 				{"update", "update z1 image"},
@@ -262,7 +261,7 @@ func Usage(imageInstalled, containerRunning bool) {
 			},
 		},
 		{
-			"system", "82",
+			"system", "214",
 			[]entry{
 				{"relocate", "move Docker data-root to ~/docker-data"},
 				{"synctime <dc-ip>", "sync clock with a DC (Kerberos)"},
@@ -270,7 +269,7 @@ func Usage(imageInstalled, containerRunning bool) {
 			},
 		},
 		{
-			"general", "118",
+			"general", "226",
 			[]entry{
 				{"help", "show this help"},
 			},
@@ -343,7 +342,7 @@ func StartHeader() {
 
 func StartDetail(label, value string) {
 	fmt.Printf("  %s[·]%s %s%-10s%s %s%s%s\n",
-		clrDim, clrReset, clrDim, label+":", clrReset, colorEmerald, value, clrReset)
+		clrDim, clrReset, clrDim, label+":", clrReset, colorPurple, value, clrReset)
 }
 
 func StartDone() {
