@@ -1,4 +1,3 @@
-// Author: z1rov
 package updater
 
 import (
@@ -17,6 +16,10 @@ import (
 )
 
 func Install() {
+	if err := config.WriteTemplate(); err != nil {
+		ui.Warn("could not write config template: " + err.Error())
+	}
+
 	spin := ui.NewSpinner("fetching version")
 	remote, _ := RemoteVersion()
 	spin.Stop()
@@ -24,7 +27,7 @@ func Install() {
 	ui.Banner()
 	fmt.Printf("  %s[Info]%s installing %s\n\n", ui.ClrInfo, ui.ClrReset, config.ImageName)
 
-	ui.StorageStep("Checking available disk space…")
+	ui.StorageStep("Checking available disk space...")
 	if err := storage.EnsureSpace(); err != nil {
 		ui.StorageErr(err.Error())
 		fmt.Println()
@@ -45,7 +48,7 @@ func Install() {
 		ui.ClrDimStr, ui.ClrReset,
 		ui.ClrOk, remote, ui.ClrReset)
 	fmt.Println()
-	ui.Ok("z1 installed — run: z1 start")
+	ui.Ok("z1 installed - run: z1 start")
 	ui.Divider()
 	fmt.Println()
 }
@@ -69,7 +72,7 @@ func Update() {
 			ui.ClrDimStr, ui.ClrReset,
 			ui.ClrErr, "not installed", ui.ClrReset)
 		fmt.Println()
-		ui.Warn("no local image found — run: z1 install")
+		ui.Warn("no local image found - run: z1 install")
 		ui.Divider()
 		fmt.Println()
 		os.Exit(1)
@@ -93,13 +96,13 @@ func Update() {
 		return
 	}
 
-	fmt.Printf("  %s[~]%s update available: %s%s%s → %s%s%s\n",
+	fmt.Printf("  %s[~]%s update available: %s%s%s -> %s%s%s\n",
 		ui.ClrWarn, ui.ClrReset,
 		ui.ClrWarn, local, ui.ClrReset,
 		ui.ClrOk, remote, ui.ClrReset)
 	fmt.Println()
 
-	ui.StorageStep("Checking available disk space…")
+	ui.StorageStep("Checking available disk space...")
 	if err := storage.EnsureSpace(); err != nil {
 		ui.StorageErr(err.Error())
 		fmt.Println()
@@ -115,11 +118,11 @@ func Update() {
 	}
 
 	fmt.Println()
-	fmt.Printf("  %s[Info]%s Cleaning up old image layers…\n", ui.ClrInfo, ui.ClrReset)
+	fmt.Printf("  %s[Info]%s Cleaning up old image layers...\n", ui.ClrInfo, ui.ClrReset)
 	docker.PruneImages()
 
 	fmt.Println()
-	fmt.Printf("  %s[+]%s %supdated%s %s%s%s → %s%s%s\n",
+	fmt.Printf("  %s[+]%s %supdated%s %s%s%s -> %s%s%s\n",
 		ui.ClrOk, ui.ClrReset,
 		ui.ClrInfo, ui.ClrReset,
 		ui.ClrWarn, local, ui.ClrReset,

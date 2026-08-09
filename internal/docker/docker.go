@@ -1,4 +1,3 @@
-// Author: z1rov
 package docker
 
 import (
@@ -6,6 +5,10 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/user"
+	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/z1rov/z1/internal/config"
 	"github.com/z1rov/z1/internal/ui"
@@ -15,17 +18,69 @@ var hostDevices = []string{
 	"/dev/net/tun",
 }
 
-func Start() {
+func hostUser() (string, string, string) {
+	name := "z1user"
+	if u, err := user.Current(); err == nil && u.Username != "" {
+		name = u.Username
+	}
+	uid := strconv.Itoa(os.Getuid())
+	gid := strconv.Itoa(os.Getgid())
+	return name, uid, gid
+}
+
+func ensureContainerUser(name, uid, gid string) error {
+	script := fmt.Sprintf(`
+Z1_USER=%s
+Z1_UID=%s
+Z1_GID=%s
+if ! getent group "$Z1_USER" >/dev/null 2>&1; then
+    groupadd -g "$Z1_GID" "$Z1_USER"
+fi
+if ! id -u "$Z1_USER" >/dev/null 2>&1; then
+    useradd -m -u "$Z1_UID" -g "$Z1_GID" -s /bin/zsh "$Z1_USER"
+fi
+usermod -aG sudo "$Z1_USER" 2>/dev/null || true
+echo "$Z1_USER ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/"$Z1_USER"
+chmod 0440 /etc/sudoers.d/"$Z1_USER"
+`, name, uid, gid)
+
+	cmd := exec.Command("docker", "exec", "-u", "root", config.ContainerName, "sh", "-c", script)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+func networkArgs(cfg *config.Config) []string {
+	switch cfg.Network.Mode {
+	case "bridge":
+		if cfg.Network.Name != "" {
+			return []string{"--network", cfg.Network.Name}
+		}
+		return []string{}
+	case "vpn":
+		args := []string{"--cap-add", "NET_ADMIN"}
+		if cfg.Network.Name != "" {
+			args = append([]string{"--network", cfg.Network.Name}, args...)
+		}
+		return args
+	default:
+		return []string{"--network", "host"}
+	}
+}
+
+func Start(usbDevice string) {
 	ui.StartHeader()
 
 	if !ImageExists() {
-		ui.Error("image not found locally — run: z1 install")
+		ui.Error("image not found locally - run: z1 install")
 		os.Exit(1)
 	}
 
+	name, uid, gid := hostUser()
+
 	if IsRunning() {
-		ui.Warn("container already running — attaching")
-		attach()
+		ui.Warn("container already running - attaching")
+		attach(name)
 		return
 	}
 
@@ -33,51 +88,117 @@ func Start() {
 		_ = exec.Command("docker", "rm", "-f", config.ContainerName).Run()
 	}
 
-	if err := os.MkdirAll(config.AnvilDir(), 0755); err != nil {
+	cfg := config.Load()
+	anvil := config.AnvilDir()
+
+	if err := os.MkdirAll(anvil, 0755); err != nil {
 		ui.Warn("could not create anvil dir: " + err.Error())
 	}
 
-	display, xauthPath := resolveX11()
+	display, xauthPath, useVNC := resolveX11()
 
 	ui.StartDetail("image", config.ImageName)
-	ui.StartDetail("anvil", config.AnvilDir())
-	ui.StartDetail("display", display)
-	ui.StartDetail("xauth", xauthPath)
+	ui.StartDetail("anvil", anvil)
+	ui.StartDetail("user", fmt.Sprintf("%s (%s:%s)", name, uid, gid))
+	ui.StartDetail("network", cfg.Network.Mode)
+
+	if useVNC {
+		ui.StartDetail("display", "vnc fallback")
+		ui.StartDetail("vnc", "connect a vnc client to localhost:5900")
+	} else {
+		ui.StartDetail("display", display)
+		ui.StartDetail("xauth", xauthPath)
+	}
 
 	args := []string{
 		"run", "-dit",
 		"--name", config.ContainerName,
-		"--network", "host",
 		"--hostname", "z1",
 		"--add-host", "z1:127.0.0.1",
 		"--user", "root",
 		"--cap-add", "SYS_TIME",
-		"--cap-add", "NET_ADMIN",
 		"--security-opt", "seccomp=unconfined",
-		"-e", "DISPLAY=" + display,
-		"-e", "XAUTHORITY=/root/.Xauthority",
-		"-v", "/tmp/.X11-unix:/tmp/.X11-unix:rw",
-		"-v", xauthPath + ":/root/.Xauthority:rw",
-		"-v", "/etc/hosts:/etc/hosts",
-		"-v", config.AnvilDir() + ":/anvil",
 	}
 
-	for _, dev := range resolveDevices() {
-		args = append(args, "--device", dev)
-		ui.StartDetail("device", dev)
+	args = append(args, networkArgs(cfg)...)
+
+	if useVNC {
+		args = append(args, "-p", "5900:5900", "-e", "VNC_MODE=1")
+	} else {
+		homeXauth := "/home/" + name + "/.Xauthority"
+		args = append(args,
+			"-e", "DISPLAY="+display,
+			"-e", "XAUTHORITY="+homeXauth,
+			"-v", "/tmp/.X11-unix:/tmp/.X11-unix:rw",
+			"-v", xauthPath+":"+homeXauth+":rw",
+		)
+	}
+
+	args = append(args,
+		"-v", "/etc/hosts:/etc/hosts",
+		"-v", anvil+":/anvil",
+	)
+
+	for _, m := range cfg.Mounts {
+		parts := strings.SplitN(m, ":", 3)
+		if len(parts) < 2 {
+			ui.Warn("skipping invalid mount: " + m)
+			continue
+		}
+		mode := "rw"
+		if len(parts) == 3 {
+			mode = parts[2]
+		}
+		mountArg := fmt.Sprintf("%s:%s:%s", parts[0], parts[1], mode)
+		args = append(args, "-v", mountArg)
+		ui.StartDetail("mount", mountArg)
+	}
+
+	for k, v := range cfg.Env {
+		args = append(args, "-e", k+"="+v)
+		ui.StartDetail("env", k+"="+v)
+	}
+
+	if cfg.Network.Mode == "vpn" {
+		for _, dev := range resolveDevices() {
+			args = append(args, "--device", dev)
+			ui.StartDetail("device", dev)
+		}
+	}
+
+	if usbDevice != "" {
+		usbPath, err := resolveUSBDevice(usbDevice)
+		if err != nil {
+			ui.Warn("usb passthrough failed: " + err.Error())
+		} else {
+			args = append(args, "--device", usbPath+":"+usbPath)
+			ui.StartDetail("usb", usbDevice+" -> "+usbPath)
+		}
 	}
 
 	args = append(args, config.ImageName)
 
-	_ = exec.Command("xhost", "+local:docker").Run()
+	if !useVNC {
+		_ = exec.Command("xhost", "+local:docker").Run()
+	}
 
 	if err := runCmd("docker", args...); err != nil {
 		ui.Error("failed to start container: " + err.Error())
 		os.Exit(1)
 	}
 
+	if cfg.Network.Mode == "vpn" && cfg.Network.VPNConfig != "" {
+		if err := connectVPN(cfg.Network.VPNConfig); err != nil {
+			ui.Warn("vpn auto-connect failed: " + err.Error())
+		}
+	}
+
+	if err := ensureContainerUser(name, uid, gid); err != nil {
+		ui.Warn("could not create non-root user: " + err.Error())
+	}
+
 	ui.StartDone()
-	attach()
+	attach(name)
 }
 
 func resolveDevices() []string {
@@ -92,11 +213,11 @@ func resolveDevices() []string {
 	return devices
 }
 
-func resolveX11() (string, string) {
+func resolveX11() (string, string, bool) {
 	display := os.Getenv("DISPLAY")
 	if display == "" {
-		display = ":0"
-		ui.Warn("$DISPLAY not set — falling back to :0 (try: sudo -E z1 start)")
+		ui.Warn("$DISPLAY not set - falling back to vnc")
+		return "", "", true
 	}
 
 	xauth := os.Getenv("XAUTHORITY")
@@ -106,20 +227,76 @@ func resolveX11() (string, string) {
 	}
 
 	if _, err := os.Stat(xauth); os.IsNotExist(err) {
-		ui.Warn("xauth file not found at " + xauth + " — generating a fresh one")
+		ui.Warn("xauth file not found at " + xauth + " - generating a fresh one")
 		home, _ := os.UserHomeDir()
 		xauth = home + "/.Xauthority"
 		_ = exec.Command("touch", xauth).Run()
 		if err := exec.Command("xauth", "-f", xauth, "generate", display, ".", "trusted").Run(); err != nil {
 			ui.Warn("xauth generate failed: " + err.Error())
+			return "", "", true
 		}
 	}
 
-	return display, xauth
+	if err := exec.Command("xset", "-display", display, "q").Run(); err != nil {
+		ui.Warn("display " + display + " not reachable - falling back to vnc")
+		return "", "", true
+	}
+
+	return display, xauth, false
 }
 
-func attach() {
-	cmd := exec.Command("docker", "exec", "-it", config.ContainerName, "zsh")
+func resolveUSBDevice(idPair string) (string, error) {
+	parts := strings.SplitN(idPair, ":", 2)
+	if len(parts) != 2 {
+		return "", fmt.Errorf("invalid usb id format, expected vendor:product")
+	}
+	vendor := strings.ToLower(parts[0])
+	product := strings.ToLower(parts[1])
+
+	out, err := exec.Command("lsusb").Output()
+	if err != nil {
+		return "", fmt.Errorf("lsusb not available: %w", err)
+	}
+
+	for _, line := range strings.Split(string(out), "\n") {
+		if !strings.Contains(line, vendor+":"+product) {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 4 {
+			continue
+		}
+		bus := fields[1]
+		devField := strings.TrimSuffix(fields[3], ":")
+		return fmt.Sprintf("/dev/bus/usb/%s/%s", bus, devField), nil
+	}
+
+	return "", fmt.Errorf("no usb device found matching %s", idPair)
+}
+
+func connectVPN(path string) error {
+	base := filepath.Base(path)
+	dst := "/etc/wireguard/" + base
+
+	cpCmd := exec.Command("docker", "cp", path, config.ContainerName+":"+dst)
+	if err := cpCmd.Run(); err != nil {
+		return fmt.Errorf("copy vpn config: %w", err)
+	}
+
+	upCmd := exec.Command("docker", "exec", "-u", "root", config.ContainerName, "wg-quick", "up", dst)
+	upCmd.Stdout = os.Stdout
+	upCmd.Stderr = os.Stderr
+	return upCmd.Run()
+}
+
+func attach(userName string) {
+	cfg := config.Load()
+	shell := cfg.Shell
+	if shell == "" {
+		shell = "zsh"
+	}
+
+	cmd := exec.Command("docker", "exec", "-it", "-u", userName, config.ContainerName, shell)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -147,7 +324,7 @@ func Stop() {
 
 func Status() {
 	if !Exists() {
-		ui.Warn("container does not exist — run: z1 start")
+		ui.Warn("container does not exist - run: z1 start")
 		return
 	}
 
@@ -162,7 +339,7 @@ func Status() {
 
 func Logs(follow bool) {
 	if !Exists() {
-		ui.Error("container does not exist — run: z1 start")
+		ui.Error("container does not exist - run: z1 start")
 		os.Exit(1)
 	}
 
@@ -180,11 +357,12 @@ func Logs(follow bool) {
 
 func Exec(args []string) {
 	if !IsRunning() {
-		ui.Error("container is not running — run: z1 start")
+		ui.Error("container is not running - run: z1 start")
 		os.Exit(1)
 	}
 
-	dockerArgs := append([]string{"exec", "-it", config.ContainerName}, args...)
+	name, _, _ := hostUser()
+	dockerArgs := append([]string{"exec", "-it", "-u", name, config.ContainerName}, args...)
 
 	cmd := exec.Command("docker", dockerArgs...)
 	cmd.Stdin = os.Stdin

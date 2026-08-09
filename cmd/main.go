@@ -1,9 +1,9 @@
-// Author: z1rov
 package main
 
 import (
 	"os"
 
+	"github.com/z1rov/z1/internal/config"
 	"github.com/z1rov/z1/internal/docker"
 	"github.com/z1rov/z1/internal/storage"
 	"github.com/z1rov/z1/internal/timesync"
@@ -24,7 +24,14 @@ func main() {
 	switch os.Args[1] {
 
 	case "start":
-		docker.Start()
+		usb := ""
+		for i := 2; i < len(os.Args); i++ {
+			if os.Args[i] == "--usb" && i+1 < len(os.Args) {
+				usb = os.Args[i+1]
+				i++
+			}
+		}
+		docker.Start(usb)
 
 	case "stop":
 		docker.Stop()
@@ -71,6 +78,9 @@ func main() {
 		} else {
 			timesync.Sync(os.Args[2])
 		}
+
+	case "config":
+		config.ShowEffective()
 
 	case "help", "--help", "-h":
 		printUsage()

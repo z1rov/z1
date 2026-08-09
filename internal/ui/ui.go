@@ -244,6 +244,7 @@ func Usage(imageInstalled, containerRunning bool) {
 			"container", "196",
 			[]entry{
 				{"start", "start z1 container"},
+				{"start --usb <vid:pid>", "start with usb device passthrough"},
 				{"stop", "stop z1 container"},
 				{"status", "show container status"},
 				{"logs", "show container logs"},
@@ -271,6 +272,7 @@ func Usage(imageInstalled, containerRunning bool) {
 		{
 			"general", "226",
 			[]entry{
+				{"config", "show effective configuration"},
 				{"help", "show this help"},
 			},
 		},

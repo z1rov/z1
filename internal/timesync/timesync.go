@@ -1,4 +1,3 @@
-// Author: z1rov
 package timesync
 
 import (
@@ -28,31 +27,31 @@ func Sync(target string) {
 	}
 
 	if !docker.ImageExists() {
-		ui.Error("z1 image not found locally — run: z1 install")
+		ui.Error("z1 image not found locally - run: z1 install")
 		os.Exit(1)
 	}
 
 	if !docker.Exists() {
-		ui.Error("z1 container does not exist — run: z1 start")
+		ui.Error("z1 container does not exist - run: z1 start")
 		os.Exit(1)
 	}
 
 	if !docker.IsRunning() {
-		ui.Error("z1 container is not running — run: z1 start")
+		ui.Error("z1 container is not running - run: z1 start")
 		os.Exit(1)
 	}
 
 	ui.Banner()
 	fmt.Printf("  %s[Info]%s Clock synchronization with %s%s%s\n\n", ui.ClrInfo, ui.ClrReset, ui.ClrWarn, target, ui.ClrReset)
 
-	ui.StorageStep("Disabling host NTP sync…")
+	ui.StorageStep("Disabling host NTP sync...")
 	if err := runCmd("timedatectl", "set-ntp", "false"); err != nil {
 		ui.StorageWarn("could not disable host NTP: " + err.Error())
 	} else {
 		ui.StorageOk("host NTP disabled")
 	}
 
-	ui.StorageStep(fmt.Sprintf("Running ntpdate against %s…", target))
+	ui.StorageStep(fmt.Sprintf("Running ntpdate against %s...", target))
 	if err := runCmd("docker", "exec", config.ContainerName, "ntpdate", target); err != nil {
 		ui.StorageErr("ntpdate failed: " + err.Error())
 		fmt.Println()
@@ -83,7 +82,7 @@ func Restore() {
 	}
 
 	ui.Banner()
-	ui.StorageStep("Re-enabling host NTP sync…")
+	ui.StorageStep("Re-enabling host NTP sync...")
 	if err := runCmd("timedatectl", "set-ntp", "true"); err != nil {
 		ui.StorageErr("could not re-enable host NTP: " + err.Error())
 		fmt.Println()
