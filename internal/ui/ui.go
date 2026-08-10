@@ -245,6 +245,7 @@ func Usage(imageInstalled, containerRunning bool) {
 			[]entry{
 				{"start", "start z1 container"},
 				{"start --usb <vid:pid>", "start with usb device passthrough"},
+				{"vnc", "activate a vnc session on the running container"},
 				{"stop", "stop z1 container"},
 				{"status", "show container status"},
 				{"logs", "show container logs"},

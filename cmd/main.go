@@ -1,3 +1,5 @@
+// ./cmd/main.go
+
 package main
 
 import (
@@ -32,6 +34,9 @@ func main() {
 			}
 		}
 		docker.Start(usb)
+
+	case "vnc":
+		docker.VNC()
 
 	case "stop":
 		docker.Stop()

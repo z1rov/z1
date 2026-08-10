@@ -1,3 +1,5 @@
+// ./internal/docker/docker.go
+
 package docker
 
 import (
@@ -84,21 +86,12 @@ func Start(usbDevice string) {
 	}
 	_ = os.Chmod(homeShare, 0777)
 
-	display, xauthPath, useVNC := resolveX11()
-
 	ui.StartDetail("image", config.ImageName)
 	ui.StartDetail("anvil", anvil)
 	ui.StartDetail("home", homeShare)
 	ui.StartDetail("user", fmt.Sprintf("%s (%s:%s)", name, uid, gid))
 	ui.StartDetail("network", cfg.Network.Mode)
-
-	if useVNC {
-		ui.StartDetail("display", "vnc fallback")
-		ui.StartDetail("vnc", "connect a vnc client to localhost:5900")
-	} else {
-		ui.StartDetail("display", display)
-		ui.StartDetail("xauth", xauthPath)
-	}
+	ui.StartDetail("vnc", "off (run: z1 vnc)")
 
 	args := []string{
 		"run", "-dit",
@@ -111,21 +104,10 @@ func Start(usbDevice string) {
 		"-e", "Z1_USER=" + name,
 		"-e", "Z1_UID=" + uid,
 		"-e", "Z1_GID=" + gid,
+		"-p", "5900:5900",
 	}
 
 	args = append(args, networkArgs(cfg)...)
-
-	if useVNC {
-		args = append(args, "-p", "5900:5900", "-e", "VNC_MODE=1")
-	} else {
-		homeXauth := "/home/" + name + "/.Xauthority"
-		args = append(args,
-			"-e", "DISPLAY="+display,
-			"-e", "XAUTHORITY="+homeXauth,
-			"-v", "/tmp/.X11-unix:/tmp/.X11-unix:rw",
-			"-v", xauthPath+":"+homeXauth+":rw",
-		)
-	}
 
 	args = append(args,
 		"-v", "/etc/hosts:/etc/hosts",
@@ -172,10 +154,6 @@ func Start(usbDevice string) {
 
 	args = append(args, config.ImageName)
 
-	if !useVNC {
-		_ = exec.Command("xhost", "+local:docker").Run()
-	}
-
 	if err := runCmd("docker", args...); err != nil {
 		ui.Error("failed to start container: " + err.Error())
 		os.Exit(1)
@@ -193,6 +171,29 @@ func Start(usbDevice string) {
 
 	ui.StartDone()
 	attach(name)
+}
+
+func VNC() {
+	if !IsRunning() {
+		ui.Error("container is not running - run: z1 start")
+		os.Exit(1)
+	}
+
+	name, _, _ := hostUser()
+
+	ui.Info("activating vnc session...")
+
+	cmd := exec.Command("docker", "exec", "-u", "root", config.ContainerName,
+		"bash", "-c", "source /z1/runtime/vnc.sh && start_vnc "+name)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		ui.Error("failed to start vnc: " + err.Error())
+		os.Exit(1)
+	}
+
+	ui.Ok("vnc ready - connect a vnc client to localhost:5900")
 }
 
 func waitForUser(name string, timeout time.Duration) bool {
@@ -217,38 +218,6 @@ func resolveDevices() []string {
 		}
 	}
 	return devices
-}
-
-func resolveX11() (string, string, bool) {
-	display := os.Getenv("DISPLAY")
-	if display == "" {
-		ui.Warn("$DISPLAY not set - falling back to vnc")
-		return "", "", true
-	}
-
-	xauth := os.Getenv("XAUTHORITY")
-	if xauth == "" {
-		home, _ := os.UserHomeDir()
-		xauth = home + "/.Xauthority"
-	}
-
-	if _, err := os.Stat(xauth); os.IsNotExist(err) {
-		ui.Warn("xauth file not found at " + xauth + " - generating a fresh one")
-		home, _ := os.UserHomeDir()
-		xauth = home + "/.Xauthority"
-		_ = exec.Command("touch", xauth).Run()
-		if err := exec.Command("xauth", "-f", xauth, "generate", display, ".", "trusted").Run(); err != nil {
-			ui.Warn("xauth generate failed: " + err.Error())
-			return "", "", true
-		}
-	}
-
-	if err := exec.Command("xset", "-display", display, "q").Run(); err != nil {
-		ui.Warn("display " + display + " not reachable - falling back to vnc")
-		return "", "", true
-	}
-
-	return display, xauth, false
 }
 
 func resolveUSBDevice(idPair string) (string, error) {
