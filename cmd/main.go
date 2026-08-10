@@ -2,7 +2,6 @@ package main
 
 import (
 	"os"
-	"strings"
 
 	"github.com/z1rov/z1/internal/config"
 	"github.com/z1rov/z1/internal/docker"
@@ -31,12 +30,6 @@ func main() {
 			}
 		}
 		docker.Start(usb)
-	case "vnc":
-		action := "start"
-		if len(os.Args) > 2 {
-			action = strings.TrimPrefix(os.Args[2], "-")
-		}
-		docker.VNC(action)
 	case "stop":
 		docker.Stop()
 	case "status":

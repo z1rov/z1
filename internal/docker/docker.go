@@ -89,7 +89,6 @@ func Start(usbDevice string) {
 	ui.StartDetail("home", homeShare)
 	ui.StartDetail("user", fmt.Sprintf("%s (%s:%s)", name, uid, gid))
 	ui.StartDetail("network", cfg.Network.Mode)
-	ui.StartDetail("vnc", "off (run: z1 vnc)")
 
 	args := []string{
 		"run", "-dit",
@@ -102,7 +101,6 @@ func Start(usbDevice string) {
 		"-e", "Z1_USER=" + name,
 		"-e", "Z1_UID=" + uid,
 		"-e", "Z1_GID=" + gid,
-		"-p", "5900:5900",
 	}
 
 	args = append(args, networkArgs(cfg)...)
@@ -175,73 +173,6 @@ func Start(usbDevice string) {
 
 	ui.StartDone()
 	attach(name)
-}
-
-func VNC(action string) {
-	switch action {
-	case "", "start":
-		vncStart()
-	case "status":
-		vncStatus()
-	case "stop", "off":
-		vncStop()
-	default:
-		ui.Error("unknown vnc action: " + action + " (use: start|status|stop)")
-		os.Exit(1)
-	}
-}
-
-func vncStart() {
-	if !IsRunning() {
-		ui.Error("container is not running - run: z1 start")
-		os.Exit(1)
-	}
-
-	name, _, _ := hostUser()
-
-	ui.Info("activating vnc session...")
-
-	cmd := exec.Command("docker", "exec", "-u", "root", config.ContainerName,
-		"bash", "-c", "source /z1/runtime/vnc.sh && start_vnc "+name)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Run(); err != nil {
-		ui.Error("failed to start vnc: " + err.Error())
-		os.Exit(1)
-	}
-
-	ui.Ok("vnc ready - connect a vnc client to localhost:5900")
-}
-
-func vncStop() {
-	if !IsRunning() {
-		ui.Error("container is not running - run: z1 start")
-		os.Exit(1)
-	}
-
-	cmd := exec.Command("docker", "exec", "-u", "root", config.ContainerName,
-		"bash", "-c", "source /z1/runtime/vnc.sh && stop_vnc")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Run(); err != nil {
-		ui.Error("failed to stop vnc: " + err.Error())
-		os.Exit(1)
-	}
-}
-
-func vncStatus() {
-	if !IsRunning() {
-		ui.Warn("container is not running")
-		return
-	}
-
-	cmd := exec.Command("docker", "exec", "-u", "root", config.ContainerName,
-		"bash", "-c", "source /z1/runtime/vnc.sh && status_vnc")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	_ = cmd.Run()
 }
 
 func waitForUser(name string, timeout time.Duration) (bool, bool) {

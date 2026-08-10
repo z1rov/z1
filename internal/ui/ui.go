@@ -39,8 +39,6 @@ const (
 
 const RepoURL = "https://github.com/z1rov/z1"
 
-var greens = []string{"93", "99", "129", "135", "141", "213"}
-
 func Info(msg string) {
 	fmt.Printf("  %s[*]%s %s\n", clrInfo, clrReset, msg)
 }
@@ -83,12 +81,14 @@ func KV(key, value, valueColor string) {
 
 func printAsciiArt() {
 	artLines := []string{
-		"     ███████╗ ██╗",
-		"     ╚══███╔╝███║",
-		"       ███╔╝ ╚██║",
-		"      ███╔╝   ██║",
-		"     ███████╗ ██║",
-		"     ╚══════╝ ╚═╝",
+		"            ████ ",
+		"           ▒▒███ ",
+		"  █████████ ▒███ ",
+		" ▒█▒▒▒▒███  ▒███ ",
+		" ▒   ███▒   ▒███ ",
+		"   ███▒   █ ▒███ ",
+		"  █████████ █████",
+		" ▒▒▒▒▒▒▒▒▒ ▒▒▒▒▒ ",
 	}
 	maxWidth := 0
 	for _, line := range artLines {
@@ -96,9 +96,8 @@ func printAsciiArt() {
 			maxWidth = len(line)
 		}
 	}
-	for i, line := range artLines {
-		color := greens[i%len(greens)]
-		fmt.Printf("  \033[38;5;%sm%-*s\033[0m\n", color, maxWidth, line)
+	for _, line := range artLines {
+		fmt.Printf("  %s%-*s%s\n", colorRed, maxWidth, line, colorReset)
 	}
 }
 
@@ -245,7 +244,6 @@ func Usage(imageInstalled, containerRunning bool) {
 			[]entry{
 				{"start", "start z1 container"},
 				{"start --usb <vid:pid>", "start with usb device passthrough"},
-				{"vnc", "activate a vnc session on the running container"},
 				{"stop", "stop z1 container"},
 				{"status", "show container status"},
 				{"logs", "show container logs"},
