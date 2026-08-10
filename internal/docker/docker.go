@@ -1,5 +1,3 @@
-// ./internal/docker/docker.go
-
 package docker
 
 import (
@@ -165,7 +163,13 @@ func Start(usbDevice string) {
 		}
 	}
 
-	if !waitForUser(name, 30*time.Second) {
+	ok, crashed := waitForUser(name, 60*time.Second)
+	if !ok {
+		if crashed {
+			ui.Error("container exited during provisioning - last logs:")
+			Logs(false)
+			os.Exit(1)
+		}
 		ui.Warn("timed out waiting for user " + name + " to be provisioned inside the container")
 	}
 
@@ -173,7 +177,21 @@ func Start(usbDevice string) {
 	attach(name)
 }
 
-func VNC() {
+func VNC(action string) {
+	switch action {
+	case "", "start":
+		vncStart()
+	case "status":
+		vncStatus()
+	case "stop", "off":
+		vncStop()
+	default:
+		ui.Error("unknown vnc action: " + action + " (use: start|status|stop)")
+		os.Exit(1)
+	}
+}
+
+func vncStart() {
 	if !IsRunning() {
 		ui.Error("container is not running - run: z1 start")
 		os.Exit(1)
@@ -196,16 +214,49 @@ func VNC() {
 	ui.Ok("vnc ready - connect a vnc client to localhost:5900")
 }
 
-func waitForUser(name string, timeout time.Duration) bool {
+func vncStop() {
+	if !IsRunning() {
+		ui.Error("container is not running - run: z1 start")
+		os.Exit(1)
+	}
+
+	cmd := exec.Command("docker", "exec", "-u", "root", config.ContainerName,
+		"bash", "-c", "source /z1/runtime/vnc.sh && stop_vnc")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		ui.Error("failed to stop vnc: " + err.Error())
+		os.Exit(1)
+	}
+}
+
+func vncStatus() {
+	if !IsRunning() {
+		ui.Warn("container is not running")
+		return
+	}
+
+	cmd := exec.Command("docker", "exec", "-u", "root", config.ContainerName,
+		"bash", "-c", "source /z1/runtime/vnc.sh && status_vnc")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	_ = cmd.Run()
+}
+
+func waitForUser(name string, timeout time.Duration) (bool, bool) {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
+		if !IsRunning() {
+			return false, true
+		}
 		cmd := exec.Command("docker", "exec", config.ContainerName, "id", "-u", name)
 		if err := cmd.Run(); err == nil {
-			return true
+			return true, false
 		}
 		time.Sleep(300 * time.Millisecond)
 	}
-	return false
+	return false, false
 }
 
 func resolveDevices() []string {
@@ -271,8 +322,19 @@ func attach(userName string) {
 		shell = "zsh"
 	}
 
-	if !waitForUser(userName, 15*time.Second) {
-		ui.Error("user " + userName + " is not ready inside the container yet")
+	if !IsRunning() {
+		ui.Error("container is not running")
+		return
+	}
+
+	ok, crashed := waitForUser(userName, 20*time.Second)
+	if !ok {
+		if crashed {
+			ui.Error("container exited before shell attach - last logs:")
+		} else {
+			ui.Error("user " + userName + " is not ready inside the container yet - last logs:")
+		}
+		Logs(false)
 		return
 	}
 
