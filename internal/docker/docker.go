@@ -1,5 +1,3 @@
-// ./internal/docker/docker.go
-
 package docker
 
 import (
@@ -80,7 +78,7 @@ func Start(usbDevice string) {
 	if err != nil || hostHome == "" {
 		hostHome = "/root"
 	}
-	homeShare := filepath.Join(hostHome, "z1-user")
+	homeShare := filepath.Join(hostHome, "z1-workspace")
 	if err := os.MkdirAll(homeShare, 0777); err != nil {
 		ui.Warn("could not create home share dir: " + err.Error())
 	}
