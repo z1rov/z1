@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/z1rov/z1/internal/config"
 	"github.com/z1rov/z1/internal/ui"
@@ -188,8 +189,24 @@ func Start(usbDevice string) {
 		}
 	}
 
+	if !waitForUser(name, 30*time.Second) {
+		ui.Warn("timed out waiting for user " + name + " to be provisioned inside the container")
+	}
+
 	ui.StartDone()
 	attach(name)
+}
+
+func waitForUser(name string, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		cmd := exec.Command("docker", "exec", config.ContainerName, "id", "-u", name)
+		if err := cmd.Run(); err == nil {
+			return true
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+	return false
 }
 
 func resolveDevices() []string {
@@ -285,6 +302,11 @@ func attach(userName string) {
 	shell := cfg.Shell
 	if shell == "" {
 		shell = "zsh"
+	}
+
+	if !waitForUser(userName, 15*time.Second) {
+		ui.Error("user " + userName + " is not ready inside the container yet")
+		return
 	}
 
 	cmd := exec.Command("docker", "exec", "-it", "-u", userName, config.ContainerName, shell)
