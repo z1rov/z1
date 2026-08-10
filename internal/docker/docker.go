@@ -1,3 +1,5 @@
+// ./internal/docker/docker.go
+
 package docker
 
 import (
@@ -26,28 +28,6 @@ func hostUser() (string, string, string) {
 	uid := strconv.Itoa(os.Getuid())
 	gid := strconv.Itoa(os.Getgid())
 	return name, uid, gid
-}
-
-func ensureContainerUser(name, uid, gid string) error {
-	script := fmt.Sprintf(`
-Z1_USER=%s
-Z1_UID=%s
-Z1_GID=%s
-if ! getent group "$Z1_USER" >/dev/null 2>&1; then
-    groupadd -g "$Z1_GID" "$Z1_USER"
-fi
-if ! id -u "$Z1_USER" >/dev/null 2>&1; then
-    useradd -m -u "$Z1_UID" -g "$Z1_GID" -s /bin/zsh "$Z1_USER"
-fi
-usermod -aG sudo "$Z1_USER" 2>/dev/null || true
-echo "$Z1_USER ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/"$Z1_USER"
-chmod 0440 /etc/sudoers.d/"$Z1_USER"
-`, name, uid, gid)
-
-	cmd := exec.Command("docker", "exec", "-u", "root", config.ContainerName, "sh", "-c", script)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
 }
 
 func networkArgs(cfg *config.Config) []string {
@@ -95,10 +75,21 @@ func Start(usbDevice string) {
 		ui.Warn("could not create anvil dir: " + err.Error())
 	}
 
+	hostHome, err := os.UserHomeDir()
+	if err != nil || hostHome == "" {
+		hostHome = "/root"
+	}
+	homeShare := filepath.Join(hostHome, "z1-user")
+	if err := os.MkdirAll(homeShare, 0777); err != nil {
+		ui.Warn("could not create home share dir: " + err.Error())
+	}
+	_ = os.Chmod(homeShare, 0777)
+
 	display, xauthPath, useVNC := resolveX11()
 
 	ui.StartDetail("image", config.ImageName)
 	ui.StartDetail("anvil", anvil)
+	ui.StartDetail("home", homeShare)
 	ui.StartDetail("user", fmt.Sprintf("%s (%s:%s)", name, uid, gid))
 	ui.StartDetail("network", cfg.Network.Mode)
 
@@ -118,6 +109,9 @@ func Start(usbDevice string) {
 		"--user", "root",
 		"--cap-add", "SYS_TIME",
 		"--security-opt", "seccomp=unconfined",
+		"-e", "Z1_USER=" + name,
+		"-e", "Z1_UID=" + uid,
+		"-e", "Z1_GID=" + gid,
 	}
 
 	args = append(args, networkArgs(cfg)...)
@@ -137,6 +131,7 @@ func Start(usbDevice string) {
 	args = append(args,
 		"-v", "/etc/hosts:/etc/hosts",
 		"-v", anvil+":/anvil",
+		"-v", homeShare+":/home/"+name,
 	)
 
 	for _, m := range cfg.Mounts {
@@ -191,10 +186,6 @@ func Start(usbDevice string) {
 		if err := connectVPN(cfg.Network.VPNConfig); err != nil {
 			ui.Warn("vpn auto-connect failed: " + err.Error())
 		}
-	}
-
-	if err := ensureContainerUser(name, uid, gid); err != nil {
-		ui.Warn("could not create non-root user: " + err.Error())
 	}
 
 	ui.StartDone()
