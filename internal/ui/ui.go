@@ -115,7 +115,7 @@ func Banner() {
 	fmt.Println()
 }
 
-func StartScreen(anvil string) {
+func StartScreen() {
 	fmt.Println()
 	printAsciiArt()
 
@@ -130,7 +130,6 @@ func StartScreen(anvil string) {
 	fmt.Println()
 	fmt.Printf("  %s[Info]%s Initializing container services:\n", clrInfo, clrReset)
 	fmt.Printf("  %s[%-13s]%s%s::Network    host%s\n", clrInfo, "host", clrReset, clrDim, clrReset)
-	fmt.Printf("  %s[%-13s]%s%s::Mount      /anvil → %s%s\n", clrAcct, "mount", clrReset, clrDim, anvil, clrReset)
 	fmt.Println()
 	fmt.Printf("  %s[Info]%s %sWelcome! Good luck with your pentesting ;)%s\n", clrInfo, clrReset, clrBold, clrReset)
 	Divider()

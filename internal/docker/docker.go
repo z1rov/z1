@@ -46,7 +46,6 @@ func networkArgs(cfg *config.Config) []string {
 		return []string{"--network", "host"}
 	}
 }
-
 func Start(usbDevice string) {
 	ui.StartHeader()
 
@@ -68,11 +67,6 @@ func Start(usbDevice string) {
 	}
 
 	cfg := config.Load()
-	anvil := config.AnvilDir()
-
-	if err := os.MkdirAll(anvil, 0755); err != nil {
-		ui.Warn("could not create anvil dir: " + err.Error())
-	}
 
 	hostHome, err := os.UserHomeDir()
 	if err != nil || hostHome == "" {
@@ -85,7 +79,6 @@ func Start(usbDevice string) {
 	_ = os.Chmod(homeShare, 0777)
 
 	ui.StartDetail("image", config.ImageName)
-	ui.StartDetail("anvil", anvil)
 	ui.StartDetail("home", homeShare)
 	ui.StartDetail("user", fmt.Sprintf("%s (%s:%s)", name, uid, gid))
 	ui.StartDetail("network", cfg.Network.Mode)
@@ -107,7 +100,6 @@ func Start(usbDevice string) {
 
 	args = append(args,
 		"-v", "/etc/hosts:/etc/hosts",
-		"-v", anvil+":/anvil",
 		"-v", homeShare+":/home/"+name,
 	)
 

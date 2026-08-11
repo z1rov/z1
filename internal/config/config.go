@@ -25,11 +25,10 @@ type NetworkConfig struct {
 }
 
 type Config struct {
-	Shell    string            `yaml:"shell"`
-	Network  NetworkConfig     `yaml:"network"`
-	Mounts   []string          `yaml:"mounts"`
-	Env      map[string]string `yaml:"env"`
-	AnvilDir string            `yaml:"anvil_dir"`
+	Shell   string            `yaml:"shell"`
+	Network NetworkConfig     `yaml:"network"`
+	Mounts  []string          `yaml:"mounts"`
+	Env     map[string]string `yaml:"env"`
 }
 
 func defaults() *Config {
@@ -91,23 +90,8 @@ func Load() *Config {
 	if len(fileCfg.Env) > 0 {
 		cfg.Env = fileCfg.Env
 	}
-	if fileCfg.AnvilDir != "" {
-		cfg.AnvilDir = fileCfg.AnvilDir
-	}
 
 	return cfg
-}
-
-func AnvilDir() string {
-	cfg := Load()
-	if cfg.AnvilDir != "" {
-		return cfg.AnvilDir
-	}
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		return "/anvil"
-	}
-	return filepath.Join(home, "anvil")
 }
 
 const template = `# z1 configuration file
@@ -131,9 +115,6 @@ mounts: []
 # extra environment variables injected into the container
 env: {}
 #  HTTP_PROXY: "http://127.0.0.1:8080"
-
-# override for the persistent workspace directory (default: ~/anvil)
-anvil_dir: ""
 `
 
 func WriteTemplate() error {
@@ -146,7 +127,6 @@ func WriteTemplate() error {
 	return os.WriteFile(ConfigPath(), []byte(template), 0644)
 }
 
-
 func ShowEffective() {
 	cfg := Load()
 
@@ -158,7 +138,6 @@ func ShowEffective() {
 	if cfg.Network.VPNConfig != "" {
 		ui.KV("network.vpn_config", cfg.Network.VPNConfig, ui.ClrInfo)
 	}
-	ui.KV("anvil_dir", AnvilDir(), ui.ClrInfo)
 
 	if len(cfg.Mounts) == 0 {
 		ui.KV("mounts", "(none)", ui.ClrDimStr)
