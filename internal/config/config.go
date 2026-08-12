@@ -19,9 +19,10 @@ const (
 )
 
 type NetworkConfig struct {
-	Mode      string `yaml:"mode"`
-	Name      string `yaml:"name"`
-	VPNConfig string `yaml:"vpn_config"`
+	Mode      string   `yaml:"mode"`
+	Name      string   `yaml:"name"`
+	VPNConfig string   `yaml:"vpn_config"`
+	DNS       []string `yaml:"dns"`
 }
 
 type Config struct {
@@ -84,6 +85,9 @@ func Load() *Config {
 	if fileCfg.Network.VPNConfig != "" {
 		cfg.Network.VPNConfig = fileCfg.Network.VPNConfig
 	}
+	if len(fileCfg.Network.DNS) > 0 {
+		cfg.Network.DNS = fileCfg.Network.DNS
+	}
 	if len(fileCfg.Mounts) > 0 {
 		cfg.Mounts = fileCfg.Mounts
 	}
@@ -107,6 +111,10 @@ network:
   name: ""
   # path to a WireGuard config to auto-connect on start (vpn mode only)
   vpn_config: ""
+  # custom DNS servers for bridge/vpn modes (defaults to 1.1.1.1, 8.8.8.8 if empty)
+  dns: []
+  #  - 1.1.1.1
+  #  - 8.8.8.8
 
 # extra bind mounts, format: host:container:mode
 mounts: []
@@ -137,6 +145,9 @@ func ShowEffective() {
 	}
 	if cfg.Network.VPNConfig != "" {
 		ui.KV("network.vpn_config", cfg.Network.VPNConfig, ui.ClrInfo)
+	}
+	if len(cfg.Network.DNS) > 0 {
+		ui.KV("network.dns", fmt.Sprintf("%v", cfg.Network.DNS), ui.ClrInfo)
 	}
 
 	if len(cfg.Mounts) == 0 {

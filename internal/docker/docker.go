@@ -19,6 +19,11 @@ var hostDevices = []string{
 	"/dev/net/tun",
 }
 
+var historyFiles = []string{
+	".bash_history",
+	".zsh_history",
+}
+
 func hostUser() (string, string, string) {
 	name := "z1user"
 	if u, err := user.Current(); err == nil && u.Username != "" {
@@ -32,20 +37,45 @@ func hostUser() (string, string, string) {
 func networkArgs(cfg *config.Config) []string {
 	switch cfg.Network.Mode {
 	case "bridge":
+		args := []string{}
 		if cfg.Network.Name != "" {
-			return []string{"--network", cfg.Network.Name}
+			args = append(args, "--network", cfg.Network.Name)
 		}
-		return []string{}
+		args = append(args, dnsArgs(cfg)...)
+		return args
 	case "vpn":
 		args := []string{"--cap-add", "NET_ADMIN"}
 		if cfg.Network.Name != "" {
 			args = append([]string{"--network", cfg.Network.Name}, args...)
 		}
+		args = append(args, dnsArgs(cfg)...)
 		return args
 	default:
 		return []string{"--network", "host"}
 	}
 }
+
+func dnsArgs(cfg *config.Config) []string {
+	servers := cfg.Network.DNS
+	if len(servers) == 0 {
+		servers = []string{"1.1.1.1", "8.8.8.8"}
+	}
+	args := []string{}
+	for _, s := range servers {
+		args = append(args, "--dns", s)
+	}
+	return args
+}
+
+func clearHistory(homeShare string) {
+	for _, f := range historyFiles {
+		path := filepath.Join(homeShare, f)
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			ui.Warn("could not clear " + f + ": " + err.Error())
+		}
+	}
+}
+
 func Start(usbDevice string) {
 	ui.StartHeader()
 
@@ -78,6 +108,8 @@ func Start(usbDevice string) {
 	}
 	_ = os.Chmod(homeShare, 0777)
 
+	clearHistory(homeShare)
+
 	ui.StartDetail("image", config.ImageName)
 	ui.StartDetail("home", homeShare)
 	ui.StartDetail("user", fmt.Sprintf("%s (%s:%s)", name, uid, gid))
@@ -96,7 +128,15 @@ func Start(usbDevice string) {
 		"-e", "Z1_GID=" + gid,
 	}
 
-	args = append(args, networkArgs(cfg)...)
+	netArgs := networkArgs(cfg)
+	args = append(args, netArgs...)
+	if cfg.Network.Mode != "host" {
+		for i := 0; i < len(netArgs); i++ {
+			if netArgs[i] == "--dns" && i+1 < len(netArgs) {
+				ui.StartDetail("dns", netArgs[i+1])
+			}
+		}
+	}
 
 	args = append(args,
 		"-v", "/etc/hosts:/etc/hosts",
