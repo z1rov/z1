@@ -139,9 +139,14 @@ func Start(usbDevice string) {
 	}
 
 	args = append(args,
-		"-v", "/etc/hosts:/etc/hosts",
 		"-v", homeShare+":/home/"+name,
 	)
+
+	if display := os.Getenv("DISPLAY"); display != "" {
+		args = append(args, "-e", "DISPLAY="+display)
+		args = append(args, "-v", "/tmp/.X11-unix:/tmp/.X11-unix:rw")
+		ui.StartDetail("display", display)
+	}
 
 	for _, m := range cfg.Mounts {
 		parts := strings.SplitN(m, ":", 3)
