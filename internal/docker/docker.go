@@ -1,6 +1,7 @@
 package docker
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -65,6 +66,52 @@ func dnsArgs(cfg *config.Config) []string {
 		args = append(args, "--dns", s)
 	}
 	return args
+}
+
+// generateXauthFile crea un archivo Xauthority nuevo a partir del cookie
+// activo del DISPLAY del host, pero reescribiendo la familia de dirección
+// a FamilyWild (ffff). Esto es necesario porque el cookie original queda
+// asociado al hostname del host (ej. "archy"), y Xlib busca el cookie por
+// hostname al conectar via socket unix. Como el contenedor tiene su propio
+// hostname (--hostname z1), la busqueda falla con "Authorization required"
+// aunque el archivo se haya copiado bien. Con family wildcard el cookie es
+// valido sin importar el hostname del proceso que se conecta.
+func generateXauthFile(display string) (string, error) {
+	if _, err := exec.LookPath("xauth"); err != nil {
+		return "", fmt.Errorf("xauth not found on host: %w", err)
+	}
+
+	xauthPath := filepath.Join(os.TempDir(), "z1-xauth-"+strconv.Itoa(os.Getpid()))
+	_ = os.Remove(xauthPath)
+
+	f, err := os.Create(xauthPath)
+	if err != nil {
+		return "", fmt.Errorf("create temp xauth file: %w", err)
+	}
+	f.Close()
+	if err := os.Chmod(xauthPath, 0600); err != nil {
+		return "", fmt.Errorf("chmod temp xauth file: %w", err)
+	}
+
+	cmdStr := fmt.Sprintf(
+		"xauth nlist %s | sed -e 's/^..../ffff/' | xauth -f %s nmerge -",
+		display, xauthPath,
+	)
+	cmd := exec.Command("sh", "-c", cmdStr)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		_ = os.Remove(xauthPath)
+		return "", fmt.Errorf("xauth generate failed: %w (%s)", err, strings.TrimSpace(stderr.String()))
+	}
+
+	info, err := os.Stat(xauthPath)
+	if err != nil || info.Size() == 0 {
+		_ = os.Remove(xauthPath)
+		return "", fmt.Errorf("no cookie found for display %s (is xauth list %s empty?)", display, display)
+	}
+
+	return xauthPath, nil
 }
 
 func clearHistory(homeShare string) {
@@ -146,6 +193,14 @@ func Start(usbDevice string) {
 		args = append(args, "-e", "DISPLAY="+display)
 		args = append(args, "-v", "/tmp/.X11-unix:/tmp/.X11-unix:rw")
 		ui.StartDetail("display", display)
+
+		if xauthPath, xerr := generateXauthFile(display); xerr != nil {
+			ui.Warn("could not generate xauth cookie (run 'xhost +local:docker' as a fallback): " + xerr.Error())
+		} else {
+			args = append(args, "-v", xauthPath+":/tmp/.Xauthority:ro")
+			args = append(args, "-e", "XAUTHORITY=/tmp/.Xauthority")
+			ui.StartDetail("xauthority", xauthPath)
+		}
 	}
 
 	for _, m := range cfg.Mounts {
